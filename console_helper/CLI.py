@@ -20,17 +20,19 @@ from bs4 import BeautifulSoup
 import requests
 
 from .addressbook import AddressBook
-
 from .notebook import Notebook
-
 from .currenсy import CurrencyList
-
 from .serializer import PickleStorage
-
 from .filesorter import sort_folder
-
-
 from .colors import *
+
+from abc import ABC, abstractmethod
+
+
+class ShowInfo(ABC):
+    @abstractmethod
+    def get_info(self):
+        raise NotImplementedError()
 
 
 # ================================= Decorator ================================#
@@ -43,7 +45,7 @@ def input_error(func):
         except KeyError as error:
             return "{}".format(R + str(error).strip("'") + N)
         except ValueError as error:
-            return f"{R+str(error)+N}"
+            return f"{R + str(error) + N}"
         except TypeError as error:
             return f"{R + str(error) + N}"
         except FileNotFoundError:
@@ -354,7 +356,9 @@ def upcoming_birthdays(*args):
         raise TypeError("Set days you interested")
     days = int(args[0])
     result = contacts.upcoming_birthdays(days)
-    return f"{N}{build_contacts_table(result)}{N}"
+    info_table = BuildContactsTable(result)
+
+    return f"{N}{info_table.get_info()}{N}"
 
 
 @input_error
@@ -381,12 +385,12 @@ def change_name(*args):
 @input_error
 def search_contact(*args):
     if not args[0]:
-        raise KeyError("Give me a some name, please")
+        raise KeyError("Give me some name, please")
 
     results = contacts.find_records(args[0])
-
+    info_table = BuildContactsTable(results)
     if results:
-        return f"{N}{build_contacts_table(results)}{N}"
+        return f"{N}{info_table.get_info()}{N}"
     return "By your request found nothing"
 
 
@@ -395,33 +399,63 @@ def show_contact(*args):
     if not args[0]:
         raise KeyError("Give me a some name, please")
     result = contacts.find_contact_by_name(args[0])
+    info_table = BuildContactsTable(result)
+
     if result is not None:
-        return f"{N}{build_contacts_table(result)}{N}"
+        return f"{N}{info_table.get_info()}{N}"
     return f"{R}Contact {args[0]} not found.{N}"
 
 
-def build_contacts_table(contacts):
-    table = ColorTable(theme=Themes.OCEAN)
-    table.field_names = ["#", "Name", "Birthday", "Phones", "Emails", "Address"]
-    table.align["Emails"] = "l"
-    # table.set_style(SINGLE_BORDER)
-    for i, record in enumerate(contacts):
-        birthday = record.birthday[0].value if record.birthday else "-"
-        address = record.address[0] if record.address else "-"
-        phones_str = _get_phones_str(record.phones)
-        emails_str = _get_emails_str(record.emails)
-        table.add_row(
-            [
-                f"{W}{i + 1}{N}",
-                f"{G}{record.name}{N}",
-                f"{B}{birthday}{N}",
-                phones_str,
-                emails_str,
-                f"{Y}{address}{N}",
-            ],
-            divider=True,
-        )
-    return table
+class BuildContactsTable(ShowInfo):
+    def __init__(self, contacts):
+        self.contacts = contacts
+
+    def get_info(self):
+        table = ColorTable(theme=Themes.OCEAN)
+        table.field_names = ["#", "Name", "Birthday", "Phones", "Emails", "Address"]
+        table.align["Emails"] = "l"
+        # table.set_style(SINGLE_BORDER)
+        for i, record in enumerate(self.contacts):
+            birthday = record.birthday[0].value if record.birthday else "-"
+            address = record.address[0] if record.address else "-"
+            phones_str = _get_phones_str(record.phones)
+            emails_str = _get_emails_str(record.emails)
+            table.add_row(
+                [
+                    f"{W}{i + 1}{N}",
+                    f"{G}{record.name}{N}",
+                    f"{B}{birthday}{N}",
+                    phones_str,
+                    emails_str,
+                    f"{Y}{address}{N}",
+                ],
+                divider=True,
+            )
+        return table
+
+
+# def build_contacts_table(contacts):
+#     table = ColorTable(theme=Themes.OCEAN)
+#     table.field_names = ["#", "Name", "Birthday", "Phones", "Emails", "Address"]
+#     table.align["Emails"] = "l"
+#     # table.set_style(SINGLE_BORDER)
+#     for i, record in enumerate(contacts):
+#         birthday = record.birthday[0].value if record.birthday else "-"
+#         address = record.address[0] if record.address else "-"
+#         phones_str = _get_phones_str(record.phones)
+#         emails_str = _get_emails_str(record.emails)
+#         table.add_row(
+#             [
+#                 f"{W}{i + 1}{N}",
+#                 f"{G}{record.name}{N}",
+#                 f"{B}{birthday}{N}",
+#                 phones_str,
+#                 emails_str,
+#                 f"{Y}{address}{N}",
+#             ],
+#             divider=True,
+#         )
+#     return table
 
 
 def _get_phones_str(phones):
@@ -429,7 +463,7 @@ def _get_phones_str(phones):
         return "-"
     phones_str = ""
     for i, phone in enumerate(phones):
-        phones_str += f"{W}{i+1}. {B}{phone.value}{N}\n"
+        phones_str += f"{W}{i + 1}. {B}{phone.value}{N}\n"
     return phones_str[:-1]
 
 
@@ -438,7 +472,7 @@ def _get_emails_str(emails):
         return "-"
     emails_str = ""
     for i, email in enumerate(emails):
-        emails_str += f"{W}{i+1}. {P}{email.value}{N}\n"
+        emails_str += f"{W}{i + 1}. {P}{email.value}{N}\n"
     return emails_str[:-1]
 
 
@@ -452,13 +486,14 @@ def show_contacts(*args):
 
     current_contact_num = 1  # Начальный номер контакта
     for tab in contacts.iterator(number_of_entries):
+        info_table = BuildContactsTable(tab)
         if tab == "continue":
             input(G + "Press <Enter> to continue..." + N)
         else:
-            table = build_contacts_table(tab)
+            table = info_table.get_info()
             # table.align["Emails"] = "l"
             # Обновляем номера контактов в колонке #
-            for i, row in enumerate(table._rows):
+            for i, row in enumerate(table.rows):
                 row[0] = current_contact_num + i
             print(table)
             # Обновляем текущий номер контакта
@@ -518,51 +553,58 @@ def add_tag(*args):
     return f"I added tag {args[1]} to note {args[0]}."
 
 
-def build_notes_table(notes, original_indices=False):
-    table = ColorTable(theme=Themes.OCEAN)
-    table.field_names = ["Index", "Tags", "Creation Date", "Text"]
-    table.max_width["Text"] = 79
-    # table.set_style(SINGLE_BORDER)
-    for note, index in notes:
-        if original_indices:
-            index = notebook.data.index(note)
-        date_str = note.date.strftime("%Y-%m-%d %H:%M:%S")
-        table.add_row(
-            [
-                f"{W}{index}{N}",
-                G + ", ".join(note.tags) + N,
-                f"{Y}{date_str}{N}",
-                f"{B}{note.text}{N}",
-            ],
-            divider=True,
-        )
-    return table
+class BuildNotesTable(ShowInfo):
+    def __init__(self, notes, original_indices=False):
+        self.notes = notes
+        self.original_indices = original_indices
+
+    def get_info(self):
+        table = ColorTable(theme=Themes.OCEAN)
+        table.field_names = ["Index", "Tags", "Creation Date", "Text"]
+        table.max_width["Text"] = 79
+        # table.set_style(SINGLE_BORDER)
+        for note, index in self.notes:
+            if self.original_indices:
+                index = notebook.data.index(note)
+            date_str = note.date.strftime("%Y-%m-%d %H:%M:%S")
+            table.add_row(
+                [
+                    f"{W}{index}{N}",
+                    G + ", ".join(note.tags) + N,
+                    f"{Y}{date_str}{N}",
+                    f"{B}{note.text}{N}",
+                ],
+                divider=True,
+            )
+        return table
 
 
 # @input_error
 def show_notes(*args):
     if args[0] is None or not args[0].isdigit():
         notes = notebook.display_notes(tag=args[0] or None, original_indices=True)
-        print(build_notes_table(notes, original_indices=True))
+        info_table = BuildNotesTable(notes, original_indices=True)
+        print(info_table.get_info())
     else:
         n = int(args[0])
         for i, tab in enumerate(notebook.iterator_notes(n)):
             if tab == "continue":
                 input(G + "Press <Enter> to continue..." + N)
             else:
-                table = build_notes_table(tab)
-                print(table)
+                info_table = BuildNotesTable(tab)
+                print(info_table.get_info())
     return f"Notes book contain {len(notebook)} note(s)."
 
 
 @input_error
 def search_notes(*args):
     if not args[0]:
-        raise KeyError("Please, add searh query")
+        raise KeyError("Please, add search query")
     results = notebook.find_notes(args[0])
     if not results:
         return f"{R}Nothing found for {args[0]}{N}"
-    return build_notes_table(results)
+    info_table = BuildNotesTable(results)
+    return info_table.get_info()
 
 
 @input_error
@@ -639,7 +681,7 @@ def get_currency(*args):
 
 # =============================== Погода ==================================== #
 
-#! Не реалізовано пошук по україномовни словам
+# ! Не реалізовано пошук по україномовни словам
 
 
 def get_weather(*args):
@@ -755,31 +797,13 @@ class CommandCompleter(Completer):
         #         yield Completion(usage, display=usage)
 
 
-# COMMAND_USAGE = {
-#     "add contact": "Someone 03.05.1995",
-#     "set phone": "Username 0935841245",
-#     "remove phone": "Username 12.12.1978",
-#     "set email": "my_name@gmail.com",
-#     "remove email": "rUsername 2",
-#     "set address": "",
-#     "remove address": "",
-#     "set birthday": "Username 12.12.1978",
-#     "upcoming birthdays": "5",
-#     "show contacts": "",
-#     "search contact": "SearchQuery",
-#     "show contact": "Username",
-#     "remove contact": "Username",
-#     "change name": "Username Bobo",
-# }
-
-
 session = PromptSession(completer=CommandCompleter(), complete_while_typing=True)
 
 command_pattern = "|".join(COMMANDS.keys())
 pattern = re.compile(
     r"\b(\.|"
     + command_pattern
-    + r")\b(?:\s+([а-яА-Яa-zA-Z0-9\.\:\\_\-]+))?(?:\s+(.+))?",
+    + r")\b(?:\s+([а-яА-Яa-zA-Z0-9.:\\_\-]+))?(?:\s+(.+))?",
     re.IGNORECASE,
 )
 
@@ -808,7 +832,7 @@ def parse_command(command):
     params = (
         tuple(
             map(
-                # Made a commands to be a uppercase
+                # Made a commands to be an uppercase
                 lambda x: x.lower() if text.groups().index(x) == 0 else x,
                 text.groups(),
             )
@@ -822,9 +846,9 @@ def parse_command(command):
 
 # ================================ main function ============================ #
 
+
 contacts = AddressBook()  # Global variable for storing contacts
 notebook = Notebook()  # Global variable for storing notes
-
 
 NOTES_FILE = "notes.bin"
 CONTACT_FILE = "contacts.bin"
